@@ -52,11 +52,11 @@ func main() {
 	// === GitHub Integration ===
 	// This would be loaded from a config file in a real application
 	githubConfig := &github.Config{
-		AuthToken:  os.Getenv("GITHUB_TOKEN"), // Make sure to set this environment variable
-		Owner:      "anthonyrawlins",
-		Repository: "bzzz",
+		AccessToken: os.Getenv("GITHUB_TOKEN"), // Corrected field name
+		Owner:       "anthonyrawlins",
+		Repository:  "bzzz",
 	}
-	ghClient, err := github.NewClient(githubConfig)
+	ghClient, err := github.NewClient(ctx, githubConfig) // Added missing ctx argument
 	if err != nil {
 		log.Fatalf("Failed to create GitHub client: %v", err)
 	}
