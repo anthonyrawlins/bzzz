@@ -9,8 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/p2p"
 	"github.com/deepblackcloud/bzzz/discovery"
+	"github.com/deepblackcloud/bzzz/github"
+	"github.com/deepblackcloud/bzzz/p2p"
 	"github.com/deepblackcloud/bzzz/pubsub"
 )
 
@@ -20,7 +21,7 @@ func main() {
 
 	fmt.Println("🚀 Starting Bzzz + Antennae P2P Task Coordination System...")
 
-	// Initialize P2P node with configuration
+	// Initialize P2P node
 	node, err := p2p.NewNode(ctx)
 	if err != nil {
 		log.Fatalf("Failed to create P2P node: %v", err)
@@ -34,27 +35,50 @@ func main() {
 		fmt.Printf("   %s/p2p/%s\n", addr, node.ID())
 	}
 
-	// Initialize mDNS discovery for local network (192.168.1.0/24)
+	// Initialize mDNS discovery
 	mdnsDiscovery, err := discovery.NewMDNSDiscovery(ctx, node.Host(), "bzzz-peer-discovery")
 	if err != nil {
 		log.Fatalf("Failed to create mDNS discovery: %v", err)
 	}
 	defer mdnsDiscovery.Close()
 
-	// Initialize PubSub for Bzzz task coordination and Antennae meta-discussion
+	// Initialize PubSub
 	ps, err := pubsub.NewPubSub(ctx, node.Host(), "bzzz/coordination/v1", "antennae/meta-discussion/v1")
 	if err != nil {
 		log.Fatalf("Failed to create PubSub: %v", err)
 	}
 	defer ps.Close()
 
+	// === GitHub Integration ===
+	// This would be loaded from a config file in a real application
+	githubConfig := &github.Config{
+		AuthToken:  os.Getenv("GITHUB_TOKEN"), // Make sure to set this environment variable
+		Owner:      "anthonyrawlins",
+		Repository: "bzzz",
+	}
+	ghClient, err := github.NewClient(githubConfig)
+	if err != nil {
+		log.Fatalf("Failed to create GitHub client: %v", err)
+	}
+
+	integrationConfig := &github.IntegrationConfig{
+		AgentID:      node.ID().ShortString(),
+		Capabilities: []string{"general", "reasoning"},
+	}
+	ghIntegration := github.NewIntegration(ctx, ghClient, ps, integrationConfig)
+	
+	// Start the integration service (polls for tasks and handles discussions)
+	ghIntegration.Start()
+	// ==========================
+
+
 	// Announce capabilities
-	go announceCapabilities(ps)
+	go announceCapabilities(ps, node.ID().ShortString())
 
 	// Start status reporting
-	go statusReporter(node, ps)
+	go statusReporter(node)
 
-	fmt.Printf("🔍 Listening for peers on local network (192.168.1.0/24)...\n")
+	fmt.Printf("🔍 Listening for peers on local network...\n")
 	fmt.Printf("📡 Ready for task coordination and meta-discussion\n")
 	fmt.Printf("🎯 Antennae collaborative reasoning enabled\n")
 
@@ -67,48 +91,31 @@ func main() {
 }
 
 // announceCapabilities periodically announces this node's capabilities
-func announceCapabilities(ps *pubsub.PubSub) {
+func announceCapabilities(ps *pubsub.PubSub, nodeID string) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
-	// Announce immediately
-	capabilities := map[string]interface{}{
-		"node_type":    "bzzz-coordinator",
-		"capabilities": []string{"task-coordination", "meta-discussion", "p2p-networking"},
-		"version":      "0.1.0",
-		"timestamp":    time.Now().Unix(),
-	}
-
-	if err := ps.PublishBzzzMessage(pubsub.CapabilityBcast, capabilities); err != nil {
-		fmt.Printf("❌ Failed to announce capabilities: %v\n", err)
-	}
-
-	// Then announce periodically
-	for {
-		select {
-		case <-ticker.C:
-			capabilities["timestamp"] = time.Now().Unix()
-			if err := ps.PublishBzzzMessage(pubsub.CapabilityBcast, capabilities); err != nil {
-				fmt.Printf("❌ Failed to announce capabilities: %v\n", err)
-			}
+	for ; ; <-ticker.C {
+		capabilities := map[string]interface{}{
+			"node_id":      nodeID,
+			"capabilities": []string{"task-coordination", "meta-discussion", "ollama-reasoning"},
+			"models":       []string{"phi3", "llama3.1"}, // Example models
+			"version":      "0.2.0",
+			"timestamp":    time.Now().Unix(),
+		}
+		if err := ps.PublishBzzzMessage(pubsub.CapabilityBcast, capabilities); err != nil {
+			fmt.Printf("❌ Failed to announce capabilities: %v\n", err)
 		}
 	}
 }
 
 // statusReporter provides periodic status updates
-func statusReporter(node *p2p.Node, ps *pubsub.PubSub) {
+func statusReporter(node *p2p.Node) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			peers := node.ConnectedPeers()
-			fmt.Printf("📊 Status: %d connected peers, ready for coordination\n", peers)
-			
-			if peers > 0 {
-				fmt.Printf("   🤝 Network formed - ready for distributed task coordination\n")
-			}
-		}
+	for ; ; <-ticker.C {
+		peers := node.ConnectedPeers()
+		fmt.Printf("📊 Status: %d connected peers\n", peers)
 	}
 }
