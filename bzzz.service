@@ -1,0 +1,40 @@
+[Unit]
+Description=Bzzz P2P Task Coordination System
+Documentation=https://github.com/anthonyrawlins/bzzz
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=tony
+Group=tony
+WorkingDirectory=/home/tony/AI/projects/Bzzz
+ExecStart=/home/tony/AI/projects/Bzzz/bzzz
+Restart=always
+RestartSec=10
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Environment variables
+Environment=HOME=/home/tony
+Environment=USER=tony
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bzzz
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/tony/AI/projects/Bzzz
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
