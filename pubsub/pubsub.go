@@ -43,7 +43,8 @@ const (
 	TaskClaim        MessageType = "task_claim"
 	TaskProgress     MessageType = "task_progress"
 	TaskComplete     MessageType = "task_complete"
-	CapabilityBcast  MessageType = "capability_broadcast"
+	CapabilityBcast  MessageType = "capability_broadcast"   // Only broadcast when capabilities change
+	AvailabilityBcast MessageType = "availability_broadcast" // Regular availability status
 	
 	// Antennae meta-discussion messages
 	MetaDiscussion MessageType = "meta_discussion" // Generic type for all discussion
