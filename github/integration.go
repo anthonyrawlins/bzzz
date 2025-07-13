@@ -273,7 +273,92 @@ func (i *Integration) triggerHumanEscalation(convo *Conversation, reason string)
 	}
 }
 
-// Unchanged functions
-func (i *Integration) filterSuitableTasks(tasks []*Task) []*Task { return tasks }
-func (i *Integration) canHandleTaskType(taskType string) bool   { return true }
-func (i *Integration) announceTaskClaim(task *Task) error       { return nil }
+// filterSuitableTasks filters tasks based on agent capabilities and task labels
+func (i *Integration) filterSuitableTasks(tasks []*Task) []*Task {
+	var suitable []*Task
+	
+	for _, task := range tasks {
+		// Check if we can handle this task based on its labels or title keywords
+		if i.canHandleTask(task) {
+			suitable = append(suitable, task)
+		}
+	}
+	
+	fmt.Printf("🔍 Filtered %d suitable tasks from %d total tasks\n", len(suitable), len(tasks))
+	return suitable
+}
+
+// canHandleTaskType checks if this agent can handle the given task type
+func (i *Integration) canHandleTaskType(taskType string) bool {
+	for _, capability := range i.config.Capabilities {
+		if capability == taskType || capability == "general" || capability == "task-coordination" {
+			return true
+		}
+	}
+	return false
+}
+
+// canHandleTask determines if this agent can handle a specific task
+func (i *Integration) canHandleTask(task *Task) bool {
+	// Check task labels for capability matches
+	for _, label := range task.Labels {
+		if i.canHandleTaskType(label) {
+			return true
+		}
+	}
+	
+	// Check title/description for keyword matches based on capabilities
+	taskText := strings.ToLower(task.Title + " " + task.Description)
+	
+	for _, capability := range i.config.Capabilities {
+		switch capability {
+		case "code-generation", "coding":
+			if strings.Contains(taskText, "code") || strings.Contains(taskText, "implement") || 
+			   strings.Contains(taskText, "develop") || strings.Contains(taskText, "write") {
+				return true
+			}
+		case "code-analysis", "review":
+			if strings.Contains(taskText, "review") || strings.Contains(taskText, "analyze") || 
+			   strings.Contains(taskText, "audit") || strings.Contains(taskText, "refactor") {
+				return true
+			}
+		case "debugging", "bug-fix":
+			if strings.Contains(taskText, "bug") || strings.Contains(taskText, "fix") || 
+			   strings.Contains(taskText, "error") || strings.Contains(taskText, "debug") {
+				return true
+			}
+		case "testing":
+			if strings.Contains(taskText, "test") || strings.Contains(taskText, "spec") ||
+			   strings.Contains(taskText, "validation") {
+				return true
+			}
+		case "documentation":
+			if strings.Contains(taskText, "doc") || strings.Contains(taskText, "readme") ||
+			   strings.Contains(taskText, "guide") || strings.Contains(taskText, "manual") {
+				return true
+			}
+		case "general", "task-coordination", "meta-discussion":
+			// These capabilities can handle any task
+			return true
+		}
+	}
+	
+	// If no specific match, check if we have general capabilities
+	return i.canHandleTaskType("general")
+}
+
+// announceTaskClaim broadcasts task claim to P2P mesh for coordination
+func (i *Integration) announceTaskClaim(task *Task) error {
+	claimData := map[string]interface{}{
+		"task_id":    task.ID,
+		"task_number": task.Number,
+		"task_title": task.Title,
+		"agent_id":   i.config.AgentID,
+		"timestamp":  time.Now().Unix(),
+		"repository": fmt.Sprintf("%s/%s", task.Labels[0], task.Labels[1]), // Assuming owner/repo in labels
+		"action":     "claimed",
+	}
+	
+	fmt.Printf("📢 Announcing task claim to P2P mesh: Task #%d\n", task.Number)
+	return i.pubsub.PublishBzzzMessage(pubsub.TaskClaim, claimData)
+}
