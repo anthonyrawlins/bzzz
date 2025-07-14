@@ -49,9 +49,9 @@ type ActiveRepositoriesResponse struct {
 
 // TaskClaimRequest represents a task claim request to Hive
 type TaskClaimRequest struct {
-	TaskID    int    `json:"task_id"`
-	AgentID   string `json:"agent_id"`
-	ClaimedAt int64  `json:"claimed_at"`
+	TaskNumber int    `json:"task_number"`
+	AgentID    string `json:"agent_id"`
+	ClaimedAt  int64  `json:"claimed_at"`
 }
 
 // TaskStatusUpdate represents a task status update to Hive
@@ -133,9 +133,9 @@ func (c *HiveClient) ClaimTask(ctx context.Context, projectID, taskID int, agent
 	url := fmt.Sprintf("%s/api/bzzz/projects/%d/claim", c.BaseURL, projectID)
 	
 	claimRequest := TaskClaimRequest{
-		TaskID:    taskID,
-		AgentID:   agentID,
-		ClaimedAt: time.Now().Unix(),
+		TaskNumber: taskID,
+		AgentID:    agentID,
+		ClaimedAt:  time.Now().Unix(),
 	}
 	
 	jsonData, err := json.Marshal(claimRequest)

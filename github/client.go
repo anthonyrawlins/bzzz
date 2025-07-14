@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"time"
 
@@ -321,9 +322,16 @@ func (c *Client) ListAvailableTasks() ([]*Task, error) {
 	return tasks, nil
 }
 
+// hashAgentID creates a short hash of the agent ID for safe branch naming
+func hashAgentID(agentID string) string {
+	hash := sha256.Sum256([]byte(agentID))
+	return fmt.Sprintf("%x", hash[:8]) // Use first 8 bytes (16 hex chars)
+}
+
 // createTaskBranch creates a new branch for task work
 func (c *Client) createTaskBranch(issueNumber int, agentID string) error {
-	branchName := fmt.Sprintf("%s%d-%s", c.config.BranchPrefix, issueNumber, agentID)
+	hashedAgentID := hashAgentID(agentID)
+	branchName := fmt.Sprintf("%s%d-%s", c.config.BranchPrefix, issueNumber, hashedAgentID)
 	
 	// Get the base branch reference
 	baseRef, _, err := c.client.Git.GetRef(

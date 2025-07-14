@@ -245,7 +245,7 @@ class BzzzMonitor:
     def draw_p2p_status(self):
         """Draw P2P network status section"""
         print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}P2P Network Status{Colors.RESET}")
-        print("━" * 30)
+        print("━" * min(80, self.terminal_width - 10))
         
         # Current peers
         peer_color = Colors.BRIGHT_GREEN if self.current_peers > 0 else Colors.BRIGHT_RED
@@ -265,7 +265,7 @@ class BzzzMonitor:
     def draw_agent_activity(self):
         """Draw agent activity section"""
         print(f"{Colors.BOLD}{Colors.BRIGHT_YELLOW}Agent Activity{Colors.RESET}")
-        print("━" * 30)
+        print("━" * min(80, self.terminal_width - 10))
         
         if not self.availability_history:
             print(f"{Colors.DIM}No recent agent activity{Colors.RESET}")
@@ -307,7 +307,7 @@ class BzzzMonitor:
     def draw_coordination_channels(self):
         """Draw real coordination channel statistics"""
         print(f"{Colors.BOLD}{Colors.BRIGHT_MAGENTA}Coordination Channels{Colors.RESET}")
-        print("━" * 50)
+        print("━" * min(120, self.terminal_width - 10))
         
         self.update_message_rates()
         
@@ -331,7 +331,7 @@ class BzzzMonitor:
     def draw_coordination_status(self):
         """Draw coordination activity section"""
         print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}System Status{Colors.RESET}")
-        print("━" * 30)
+        print("━" * min(80, self.terminal_width - 10))
         
         # Total coordination stats
         total_coord_msgs = (self.channel_stats['bzzz_coordination']['messages'] + 
@@ -350,7 +350,7 @@ class BzzzMonitor:
     def draw_recent_activity(self):
         """Draw recent activity log with compact timestamps"""
         print(f"{Colors.BOLD}{Colors.BRIGHT_WHITE}Recent Activity{Colors.RESET}")
-        print("━" * 50)
+        print("━" * min(120, self.terminal_width - 10))
         
         # Combine and sort recent activities
         all_activities = []
@@ -379,7 +379,7 @@ class BzzzMonitor:
                 continue  # These go to errors
             else:
                 msg = msg.split(': ', 1)[-1] if ': ' in msg else msg
-                msg = msg[:60] + "..." if len(msg) > 60 else msg
+                msg = msg[:180] + "..." if len(msg) > 180 else msg
             
             all_activities.append({
                 'time': activity['timestamp'],
@@ -397,7 +397,7 @@ class BzzzMonitor:
                 err_msg = "GitHub verification failed (expected)"
             else:
                 err_msg = err_msg.split(': ', 1)[-1] if ': ' in err_msg else err_msg
-                err_msg = err_msg[:60] + "..." if len(err_msg) > 60 else err_msg
+                err_msg = err_msg[:180] + "..." if len(err_msg) > 180 else err_msg
             
             all_activities.append({
                 'time': error['timestamp'],
@@ -453,7 +453,7 @@ class BzzzMonitor:
     
     def draw_footer(self):
         """Draw footer with controls"""
-        print("━" * 50)
+        print("━" * min(120, self.terminal_width - 10))
         print(f"{Colors.DIM}Press Ctrl+C to exit | Refresh rate: {self.refresh_rate}s{Colors.RESET}")
     
     def run(self):

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -53,6 +54,16 @@ func CreateSandbox(ctx context.Context, taskImage string) (*Sandbox, error) {
 		return nil, fmt.Errorf("failed to create temp dir for sandbox: %w", err)
 	}
 
+	// Read GitHub token for authentication
+	githubToken := os.Getenv("BZZZ_GITHUB_TOKEN")
+	if githubToken == "" {
+		// Try to read from file
+		tokenBytes, err := os.ReadFile("/home/tony/AI/secrets/passwords_and_tokens/gh-token")
+		if err == nil {
+			githubToken = strings.TrimSpace(string(tokenBytes))
+		}
+	}
+
 	// Define container configuration
 	containerConfig := &container.Config{
 		Image:        taskImage,
@@ -60,6 +71,10 @@ func CreateSandbox(ctx context.Context, taskImage string) (*Sandbox, error) {
 		OpenStdin:    true,
 		WorkingDir:   "/home/agent/work",
 		User:         "agent",
+		Env: []string{
+			"GITHUB_TOKEN=" + githubToken,
+			"GH_TOKEN=" + githubToken,
+		},
 	}
 
 	// Define host configuration (e.g., volume mounts, resource limits)

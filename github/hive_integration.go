@@ -313,18 +313,33 @@ func (hi *HiveIntegration) executeTask(task *types.EnhancedTask, repoClient *Rep
 	fmt.Printf("🚀 Starting execution of task #%d in sandbox...\n", task.Number)
 
 	// The executor now handles the entire iterative process.
-	branchName, err := executor.ExecuteTask(hi.ctx, task, hi.hlog)
+	result, err := executor.ExecuteTask(hi.ctx, task, hi.hlog)
 	if err != nil {
 		fmt.Printf("❌ Failed to execute task #%d: %v\n", task.Number, err)
 		hi.hlog.Append(logging.TaskFailed, map[string]interface{}{"task_id": task.Number, "reason": "task execution failed in sandbox"})
 		return
 	}
 
+	// Ensure sandbox cleanup happens regardless of PR creation success/failure
+	defer result.Sandbox.DestroySandbox()
+
 	// Create a pull request
-	pr, err := repoClient.Client.CreatePullRequest(task.Number, branchName, hi.config.AgentID)
+	pr, err := repoClient.Client.CreatePullRequest(task.Number, result.BranchName, hi.config.AgentID)
 	if err != nil {
 		fmt.Printf("❌ Failed to create pull request for task #%d: %v\n", task.Number, err)
-		hi.hlog.Append(logging.TaskFailed, map[string]interface{}{"task_id": task.Number, "reason": "failed to create pull request"})
+		fmt.Printf("📝 Note: Branch '%s' has been pushed to repository and work is preserved\n", result.BranchName)
+		
+		// Escalate PR creation failure to humans via N8N webhook
+		escalationReason := fmt.Sprintf("Failed to create pull request: %v. Task execution completed successfully and work is preserved in branch '%s', but PR creation failed.", err, result.BranchName)
+		hi.requestAssistance(task, escalationReason, fmt.Sprintf("bzzz/meta/issue/%d", task.Number))
+		
+		hi.hlog.Append(logging.TaskFailed, map[string]interface{}{
+			"task_id": task.Number, 
+			"reason": "failed to create pull request",
+			"branch_name": result.BranchName,
+			"work_preserved": true,
+			"escalated": true,
+		})
 		return
 	}
 
