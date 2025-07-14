@@ -1,0 +1,1 @@
+tony ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop bzzz, /usr/bin/systemctl start bzzz, /usr/bin/systemctl restart bzzz

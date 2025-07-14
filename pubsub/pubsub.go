@@ -47,7 +47,11 @@ const (
 	AvailabilityBcast MessageType = "availability_broadcast" // Regular availability status
 	
 	// Antennae meta-discussion messages
-	MetaDiscussion MessageType = "meta_discussion" // Generic type for all discussion
+	MetaDiscussion       MessageType = "meta_discussion"        // Generic type for all discussion
+	CoordinationRequest  MessageType = "coordination_request"   // Request for coordination
+	CoordinationComplete MessageType = "coordination_complete"  // Coordination session completed
+	DependencyAlert      MessageType = "dependency_alert"       // Dependency detected
+	EscalationTrigger    MessageType = "escalation_trigger"     // Human escalation needed
 )
 
 // Message represents a Bzzz/Antennae message

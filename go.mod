@@ -8,6 +8,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.10.0
 	github.com/multiformats/go-multiaddr v0.12.0
 	golang.org/x/oauth2 v0.15.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

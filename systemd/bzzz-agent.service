@@ -1,0 +1,38 @@
+[Unit]
+Description=Bzzz P2P Task Coordination Agent
+Documentation=https://github.com/deepblackcloud/bzzz
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tony
+Group=tony
+WorkingDirectory=/home/tony/AI/projects/Bzzz
+ExecStart=/home/tony/AI/projects/Bzzz/bzzz
+Restart=always
+RestartSec=10
+
+# Environment variables
+Environment=BZZZ_LOG_LEVEL=info
+Environment=BZZZ_HIVE_API_URL=https://hive.home.deepblack.cloud
+Environment=BZZZ_GITHUB_TOKEN_FILE=/home/tony/AI/secrets/passwords_and_tokens/gh-token
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=strict
+ReadWritePaths=/home/tony/AI/projects/Bzzz /tmp /home/tony/.config/bzzz
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bzzz-agent
+
+[Install]
+WantedBy=multi-user.target
