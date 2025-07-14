@@ -15,6 +15,11 @@ const (
 	defaultTimeout  = 60 * time.Second
 )
 
+var (
+	availableModels []string
+	modelWebhookURL string
+)
+
 // OllamaRequest represents the request payload for the Ollama API.
 type OllamaRequest struct {
 	Model  string `json:"model"`
@@ -76,4 +81,69 @@ func GenerateResponse(ctx context.Context, model, prompt string) (string, error)
 	}
 
 	return ollamaResp.Response, nil
+}
+
+// SetModelConfig configures the available models and webhook URL for smart model selection
+func SetModelConfig(models []string, webhookURL string) {
+	availableModels = models
+	modelWebhookURL = webhookURL
+}
+
+// selectBestModel calls the model selection webhook to choose the best model for a prompt
+func selectBestModel(availableModels []string, prompt string) string {
+	if modelWebhookURL == "" || len(availableModels) == 0 {
+		// Fallback to first available model
+		if len(availableModels) > 0 {
+			return availableModels[0]
+		}
+		return "phi3" // Last resort fallback
+	}
+	
+	requestPayload := map[string]interface{}{
+		"models": availableModels,
+		"prompt": prompt,
+	}
+	
+	payloadBytes, err := json.Marshal(requestPayload)
+	if err != nil {
+		// Fallback on error
+		return availableModels[0]
+	}
+	
+	resp, err := http.Post(modelWebhookURL, "application/json", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		// Fallback on error
+		return availableModels[0]
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		// Fallback on error
+		return availableModels[0]
+	}
+	
+	var response struct {
+		Model string `json:"model"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		// Fallback on error
+		return availableModels[0]
+	}
+	
+	// Validate that the returned model is in our available list
+	for _, model := range availableModels {
+		if model == response.Model {
+			return response.Model
+		}
+	}
+	
+	// Fallback if webhook returned invalid model
+	return availableModels[0]
+}
+
+// GenerateResponseSmart automatically selects the best model for the prompt
+func GenerateResponseSmart(ctx context.Context, prompt string) (string, error) {
+	selectedModel := selectBestModel(availableModels, prompt)
+	return GenerateResponse(ctx, selectedModel, prompt)
 }

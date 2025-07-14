@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/discovery"
-	"github.com/deepblackcloud/bzzz/p2p"
-	"github.com/deepblackcloud/bzzz/pubsub"
-	"github.com/deepblackcloud/bzzz/test"
+	"github.com/anthonyrawlins/bzzz/discovery"
+	"github.com/anthonyrawlins/bzzz/p2p"
+	"github.com/anthonyrawlins/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/test"
 )
 
 func main() {

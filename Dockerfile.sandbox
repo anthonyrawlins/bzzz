@@ -1,0 +1,23 @@
+# Use a standard Go development image as the base
+FROM golang:1.21
+
+# Install common development tools and security updates
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    curl \
+    tree \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for the agent to run as
+RUN useradd -ms /bin/bash agent
+
+# Set the working directory for the agent
+WORKDIR /home/agent/work
+
+# Switch to the non-root user
+USER agent
+
+# Keep the container alive
+CMD ["sleep", "infinity"]
+

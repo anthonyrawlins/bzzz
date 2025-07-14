@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -12,12 +14,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/discovery"
-	"github.com/deepblackcloud/bzzz/github"
-	"github.com/deepblackcloud/bzzz/p2p"
-	"github.com/deepblackcloud/bzzz/pkg/config"
-	"github.com/deepblackcloud/bzzz/pkg/hive"
-	"github.com/deepblackcloud/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/discovery"
+	"github.com/anthonyrawlins/bzzz/github"
+	"github.com/anthonyrawlins/bzzz/logging"
+	"github.com/anthonyrawlins/bzzz/p2p"
+	"github.com/anthonyrawlins/bzzz/pkg/config"
+	"github.com/anthonyrawlins/bzzz/pkg/hive"
+	"github.com/anthonyrawlins/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/reasoning"
 )
 
 // SimpleTaskTracker tracks active tasks for availability reporting
@@ -97,6 +101,11 @@ func main() {
 		fmt.Printf("   %s/p2p/%s\n", addr, node.ID())
 	}
 
+	// Initialize Hypercore-style logger
+	hlog := logging.NewHypercoreLog(node.ID())
+	hlog.Append(logging.PeerJoined, map[string]interface{}{"status": "started"})
+	fmt.Printf("📝 Hypercore logger initialized\n")
+
 	// Initialize mDNS discovery
 	mdnsDiscovery, err := discovery.NewMDNSDiscovery(ctx, node.Host(), "bzzz-peer-discovery")
 	if err != nil {
@@ -147,7 +156,7 @@ func main() {
 			MaxTasks:     cfg.Agent.MaxTasks,
 		}
 		
-		ghIntegration = github.NewHiveIntegration(ctx, hiveClient, githubToken, ps, integrationConfig)
+		ghIntegration = github.NewHiveIntegration(ctx, hiveClient, githubToken, ps, hlog, integrationConfig)
 		
 		// Start the integration service
 		ghIntegration.Start()
@@ -215,8 +224,124 @@ func announceAvailability(ps *pubsub.PubSub, nodeID string, taskTracker *SimpleT
 	}
 }
 
+// detectAvailableOllamaModels queries Ollama API for available models
+func detectAvailableOllamaModels() ([]string, error) {
+	resp, err := http.Get("http://localhost:11434/api/tags")
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Ollama API: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Ollama API returned status %d", resp.StatusCode)
+	}
+	
+	var tagsResponse struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&tagsResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode Ollama response: %w", err)
+	}
+	
+	models := make([]string, 0, len(tagsResponse.Models))
+	for _, model := range tagsResponse.Models {
+		models = append(models, model.Name)
+	}
+	
+	return models, nil
+}
+
+// selectBestModel calls the model selection webhook to choose the best model for a prompt
+func selectBestModel(webhookURL string, availableModels []string, prompt string) (string, error) {
+	if webhookURL == "" || len(availableModels) == 0 {
+		// Fallback to first available model
+		if len(availableModels) > 0 {
+			return availableModels[0], nil
+		}
+		return "", fmt.Errorf("no models available")
+	}
+	
+	requestPayload := map[string]interface{}{
+		"models": availableModels,
+		"prompt": prompt,
+	}
+	
+	payloadBytes, err := json.Marshal(requestPayload)
+	if err != nil {
+		// Fallback on error
+		return availableModels[0], nil
+	}
+	
+	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		// Fallback on error
+		return availableModels[0], nil
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		// Fallback on error
+		return availableModels[0], nil
+	}
+	
+	var response struct {
+		Model string `json:"model"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		// Fallback on error
+		return availableModels[0], nil
+	}
+	
+	// Validate that the returned model is in our available list
+	for _, model := range availableModels {
+		if model == response.Model {
+			return response.Model, nil
+		}
+	}
+	
+	// Fallback if webhook returned invalid model
+	return availableModels[0], nil
+}
+
 // announceCapabilitiesOnChange broadcasts capabilities only when they change
 func announceCapabilitiesOnChange(ps *pubsub.PubSub, nodeID string, cfg *config.Config) {
+	// Detect available Ollama models and update config
+	availableModels, err := detectAvailableOllamaModels()
+	if err != nil {
+		fmt.Printf("⚠️ Failed to detect Ollama models: %v\n", err)
+		fmt.Printf("🔄 Using configured models: %v\n", cfg.Agent.Models)
+	} else {
+		// Filter configured models to only include available ones
+		validModels := make([]string, 0)
+		for _, configModel := range cfg.Agent.Models {
+			for _, availableModel := range availableModels {
+				if configModel == availableModel {
+					validModels = append(validModels, configModel)
+					break
+				}
+			}
+		}
+		
+		if len(validModels) == 0 {
+			fmt.Printf("⚠️ No configured models available in Ollama, using first available: %v\n", availableModels)
+			if len(availableModels) > 0 {
+				validModels = []string{availableModels[0]}
+			}
+		} else {
+			fmt.Printf("✅ Available models: %v\n", validModels)
+		}
+		
+		// Update config with available models
+		cfg.Agent.Models = validModels
+		
+		// Configure reasoning module with available models and webhook
+		reasoning.SetModelConfig(validModels, cfg.Agent.ModelSelectionWebhook)
+	}
+
 	// Get current capabilities
 	currentCaps := map[string]interface{}{
 		"node_id":      nodeID,

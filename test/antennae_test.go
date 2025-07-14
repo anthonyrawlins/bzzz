@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/pubsub"
-	"github.com/deepblackcloud/bzzz/pkg/coordination"
+	"github.com/anthonyrawlins/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/pkg/coordination"
 )
 
 // AntennaeTestSuite runs comprehensive tests for the antennae coordination system

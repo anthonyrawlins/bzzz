@@ -64,7 +64,7 @@ Based on comprehensive analysis of the existing Hive infrastructure and Bzzz's P
 # Docker Compose configuration for bzzz-agent
 services:
   bzzz-agent:
-    image: bzzz-agent:latest
+    image: registry.home.deepblack.cloud/tony/bzzz-agent:latest
     network_mode: "host"  # Direct host network access for P2P
     volumes:
       - ./data:/app/data

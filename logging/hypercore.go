@@ -48,12 +48,15 @@ const (
 	TaskFailed     LogType = "task_failed"
 	
 	// Antennae meta-discussion logs
-	PlanProposed   LogType = "plan_proposed"
-	ObjectionRaised LogType = "objection_raised"
-	Collaboration  LogType = "collaboration"
-	ConsensusReached LogType = "consensus_reached"
-	Escalation     LogType = "escalation"
-	
+	PlanProposed      LogType = "plan_proposed"
+	ObjectionRaised   LogType = "objection_raised"
+	Collaboration     LogType = "collaboration"
+	ConsensusReached  LogType = "consensus_reached"
+	Escalation        LogType = "escalation"
+	TaskHelpRequested LogType = "task_help_requested"
+	TaskHelpOffered   LogType = "task_help_offered"
+	TaskHelpReceived  LogType = "task_help_received"
+
 	// System logs
 	PeerJoined     LogType = "peer_joined"
 	PeerLeft       LogType = "peer_left"

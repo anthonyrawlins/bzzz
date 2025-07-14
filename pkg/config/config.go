@@ -29,12 +29,13 @@ type HiveAPIConfig struct {
 
 // AgentConfig holds agent-specific configuration
 type AgentConfig struct {
-	ID             string        `yaml:"id"`
-	Capabilities   []string      `yaml:"capabilities"`
-	PollInterval   time.Duration `yaml:"poll_interval"`
-	MaxTasks       int           `yaml:"max_tasks"`
-	Models         []string      `yaml:"models"`
-	Specialization string        `yaml:"specialization"`
+	ID                    string        `yaml:"id"`
+	Capabilities          []string      `yaml:"capabilities"`
+	PollInterval          time.Duration `yaml:"poll_interval"`
+	MaxTasks              int           `yaml:"max_tasks"`
+	Models                []string      `yaml:"models"`
+	Specialization        string        `yaml:"specialization"`
+	ModelSelectionWebhook string        `yaml:"model_selection_webhook"`
 }
 
 // GitHubConfig holds GitHub integration settings
@@ -100,11 +101,12 @@ func getDefaultConfig() *Config {
 			RetryCount: 3,
 		},
 		Agent: AgentConfig{
-			Capabilities:   []string{"general", "reasoning", "task-coordination"},
-			PollInterval:   30 * time.Second,
-			MaxTasks:       3,
-			Models:         []string{"phi3", "llama3.1"},
-			Specialization: "general_developer",
+			Capabilities:          []string{"general", "reasoning", "task-coordination"},
+			PollInterval:          30 * time.Second,
+			MaxTasks:              3,
+			Models:                []string{"phi3", "llama3.1"},
+			Specialization:        "general_developer",
+			ModelSelectionWebhook: "https://n8n.home.deepblack.cloud/webhook/model-selection",
 		},
 		GitHub: GitHubConfig{
 			TokenFile: "/home/tony/AI/secrets/passwords_and_tokens/gh-token",
@@ -163,6 +165,9 @@ func loadFromEnv(config *Config) error {
 	}
 	if specialization := os.Getenv("BZZZ_AGENT_SPECIALIZATION"); specialization != "" {
 		config.Agent.Specialization = specialization
+	}
+	if modelWebhook := os.Getenv("BZZZ_MODEL_SELECTION_WEBHOOK"); modelWebhook != "" {
+		config.Agent.ModelSelectionWebhook = modelWebhook
 	}
 	
 	// GitHub configuration

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/pubsub"
 )
 
 // AntennaeMonitor tracks and logs antennae coordination activity

@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/pubsub"
 )
 
 // TaskSimulator generates realistic task scenarios for testing antennae coordination
@@ -287,7 +287,7 @@ func generateMockRepositories() []MockRepository {
 		{
 			Owner: "deepblackcloud",
 			Name:  "bzzz",
-			URL:   "https://github.com/deepblackcloud/bzzz",
+			URL:   "https://github.com/anthonyrawlins/bzzz",
 			Dependencies: []string{"hive"},
 			Tasks: []MockTask{
 				{

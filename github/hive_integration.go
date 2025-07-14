@@ -7,27 +7,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/pkg/hive"
-	"github.com/deepblackcloud/bzzz/pubsub"
-	"github.com/deepblackcloud/bzzz/reasoning"
+	"github.com/anthonyrawlins/bzzz/executor"
+	"github.com/anthonyrawlins/bzzz/logging"
+	"github.com/anthonyrawlins/bzzz/pkg/hive"
+	"github.com/anthonyrawlins/bzzz/pkg/types"
+	"github.com/anthonyrawlins/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/reasoning"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // HiveIntegration handles dynamic repository discovery via Hive API
 type HiveIntegration struct {
-	hiveClient        *hive.HiveClient
-	githubToken       string
-	pubsub            *pubsub.PubSub
-	ctx               context.Context
-	config            *IntegrationConfig
-	
+	hiveClient *hive.HiveClient
+	githubToken string
+	pubsub *pubsub.PubSub
+	hlog *logging.HypercoreLog
+	ctx context.Context
+	config *IntegrationConfig
+
 	// Repository management
-	repositories      map[int]*RepositoryClient // projectID -> GitHub client
-	repositoryLock    sync.RWMutex
-	
+	repositories map[int]*RepositoryClient // projectID -> GitHub client
+	repositoryLock sync.RWMutex
+
 	// Conversation tracking
 	activeDiscussions map[string]*Conversation // "projectID:taskID" -> conversation
-	discussionLock    sync.RWMutex
+	discussionLock sync.RWMutex
 }
 
 // RepositoryClient wraps a GitHub client for a specific repository
@@ -38,7 +42,7 @@ type RepositoryClient struct {
 }
 
 // NewHiveIntegration creates a new Hive-based GitHub integration
-func NewHiveIntegration(ctx context.Context, hiveClient *hive.HiveClient, githubToken string, ps *pubsub.PubSub, config *IntegrationConfig) *HiveIntegration {
+func NewHiveIntegration(ctx context.Context, hiveClient *hive.HiveClient, githubToken string, ps *pubsub.PubSub, hlog *logging.HypercoreLog, config *IntegrationConfig) *HiveIntegration {
 	if config.PollInterval == 0 {
 		config.PollInterval = 30 * time.Second
 	}
@@ -50,6 +54,7 @@ func NewHiveIntegration(ctx context.Context, hiveClient *hive.HiveClient, github
 		hiveClient:        hiveClient,
 		githubToken:       githubToken,
 		pubsub:            ps,
+		hlog:              hlog,
 		ctx:               ctx,
 		config:            config,
 		repositories:      make(map[int]*RepositoryClient),
@@ -170,7 +175,7 @@ func (hi *HiveIntegration) pollAllRepositories() {
 	
 	fmt.Printf("🔍 Polling %d repositories for available tasks...\n", len(repositories))
 	
-	var allTasks []*EnhancedTask
+	var allTasks []*types.EnhancedTask
 	
 	// Collect tasks from all repositories
 	for _, repoClient := range repositories {
@@ -202,7 +207,7 @@ func (hi *HiveIntegration) pollAllRepositories() {
 }
 
 // getRepositoryTasks fetches available tasks from a specific repository
-func (hi *HiveIntegration) getRepositoryTasks(repoClient *RepositoryClient) ([]*EnhancedTask, error) {
+func (hi *HiveIntegration) getRepositoryTasks(repoClient *RepositoryClient) ([]*types.EnhancedTask, error) {
 	// Get tasks from GitHub
 	githubTasks, err := repoClient.Client.ListAvailableTasks()
 	if err != nil {
@@ -210,10 +215,23 @@ func (hi *HiveIntegration) getRepositoryTasks(repoClient *RepositoryClient) ([]*
 	}
 	
 	// Convert to enhanced tasks with project context
-	var enhancedTasks []*EnhancedTask
+	var enhancedTasks []*types.EnhancedTask
 	for _, task := range githubTasks {
-		enhancedTask := &EnhancedTask{
-			Task:       *task,
+		enhancedTask := &types.EnhancedTask{
+			ID:          task.ID,
+			Number:      task.Number,
+			Title:       task.Title,
+			Description: task.Description,
+			State:       task.State,
+			Labels:      task.Labels,
+			Assignee:    task.Assignee,
+			CreatedAt:   task.CreatedAt,
+			UpdatedAt:   task.UpdatedAt,
+			TaskType:    task.TaskType,
+			Priority:    task.Priority,
+			Requirements: task.Requirements,
+			Deliverables: task.Deliverables,
+			Context:     task.Context,
 			ProjectID:  repoClient.Repository.ProjectID,
 			GitURL:     repoClient.Repository.GitURL,
 			Repository: repoClient.Repository,
@@ -221,20 +239,12 @@ func (hi *HiveIntegration) getRepositoryTasks(repoClient *RepositoryClient) ([]*
 		enhancedTasks = append(enhancedTasks, enhancedTask)
 	}
 	
-	return enhancedTasks, nil
-}
-
-// EnhancedTask extends Task with project context
-type EnhancedTask struct {
-	Task
-	ProjectID  int
-	GitURL     string
-	Repository hive.Repository
+		return enhancedTasks, nil
 }
 
 // filterSuitableTasks filters tasks based on agent capabilities
-func (hi *HiveIntegration) filterSuitableTasks(tasks []*EnhancedTask) []*EnhancedTask {
-	var suitable []*EnhancedTask
+func (hi *HiveIntegration) filterSuitableTasks(tasks []*types.EnhancedTask) []*types.EnhancedTask {
+	var suitable []*types.EnhancedTask
 	
 	for _, task := range tasks {
 		if hi.canHandleTaskType(task.TaskType) {
@@ -256,7 +266,7 @@ func (hi *HiveIntegration) canHandleTaskType(taskType string) bool {
 }
 
 // claimAndExecuteTask claims a task and begins execution
-func (hi *HiveIntegration) claimAndExecuteTask(task *EnhancedTask) {
+func (hi *HiveIntegration) claimAndExecuteTask(task *types.EnhancedTask) {
 	hi.repositoryLock.RLock()
 	repoClient, exists := hi.repositories[task.ProjectID]
 	hi.repositoryLock.RUnlock()
@@ -267,7 +277,7 @@ func (hi *HiveIntegration) claimAndExecuteTask(task *EnhancedTask) {
 	}
 	
 	// Claim the task in GitHub
-	claimedTask, err := repoClient.Client.ClaimTask(task.Number, hi.config.AgentID)
+	_, err := repoClient.Client.ClaimTask(task.Number, hi.config.AgentID)
 	if err != nil {
 		fmt.Printf("❌ Failed to claim task %d in %s/%s: %v\n", 
 			task.Number, task.Repository.Owner, task.Repository.Repository, err)
@@ -275,8 +285,15 @@ func (hi *HiveIntegration) claimAndExecuteTask(task *EnhancedTask) {
 	}
 	
 	fmt.Printf("✋ Claimed task #%d from %s/%s: %s\n", 
-		claimedTask.Number, task.Repository.Owner, task.Repository.Repository, claimedTask.Title)
+		task.Number, task.Repository.Owner, task.Repository.Repository, task.Title)
 	
+	// Log the claim
+	hi.hlog.Append(logging.TaskClaimed, map[string]interface{}{
+		"task_id":    task.Number,
+		"repository": fmt.Sprintf("%s/%s", task.Repository.Owner, task.Repository.Repository),
+		"title":      task.Title,
+	})
+
 	// Report claim to Hive
 	if err := hi.hiveClient.ClaimTask(hi.ctx, task.ProjectID, task.Number, hi.config.AgentID); err != nil {
 		fmt.Printf("⚠️ Failed to report task claim to Hive: %v\n", err)
@@ -288,113 +305,113 @@ func (hi *HiveIntegration) claimAndExecuteTask(task *EnhancedTask) {
 
 // executeTask executes a claimed task with reasoning and coordination
 func (hi *HiveIntegration) executeTask(task *EnhancedTask, repoClient *RepositoryClient) {
-	fmt.Printf("🚀 Starting execution of task #%d from %s/%s: %s\n", 
-		task.Number, task.Repository.Owner, task.Repository.Repository, task.Title)
-	
-	// Generate execution plan using reasoning
-	prompt := fmt.Sprintf("You are an expert AI developer working on a distributed task from repository %s/%s. "+
-		"Create a concise, step-by-step plan to resolve this GitHub issue. "+
-		"Issue Title: %s. Issue Body: %s. Project Context: %s", 
-		task.Repository.Owner, task.Repository.Repository, task.Title, task.Description, task.GitURL)
-	
-	plan, err := reasoning.GenerateResponse(hi.ctx, "phi3", prompt)
+	// Define the dynamic topic for this task
+	taskTopic := fmt.Sprintf("bzzz/meta/issue/%d", task.Number)
+	hi.pubsub.JoinDynamicTopic(taskTopic)
+	defer hi.pubsub.LeaveDynamicTopic(taskTopic)
+
+	fmt.Printf("🚀 Starting execution of task #%d in sandbox...\n", task.Number)
+
+	// The executor now handles the entire iterative process.
+	branchName, err := executor.ExecuteTask(hi.ctx, task, hi.hlog)
 	if err != nil {
-		fmt.Printf("❌ Failed to generate execution plan for task #%d: %v\n", task.Number, err)
+		fmt.Printf("❌ Failed to execute task #%d: %v\n", task.Number, err)
+		hi.hlog.Append(logging.TaskFailed, map[string]interface{}{"task_id": task.Number, "reason": "task execution failed in sandbox"})
 		return
 	}
-	
-	fmt.Printf("📝 Generated Plan for task #%d:\n%s\n", task.Number, plan)
-	
-	// Start meta-discussion
-	conversationKey := fmt.Sprintf("%d:%d", task.ProjectID, task.Number)
-	
-	hi.discussionLock.Lock()
-	hi.activeDiscussions[conversationKey] = &Conversation{
-		TaskID:          task.Number,
-		TaskTitle:       task.Title,
-		TaskDescription: task.Description,
-		History:         []string{fmt.Sprintf("Plan by %s (%s/%s): %s", hi.config.AgentID, task.Repository.Owner, task.Repository.Repository, plan)},
-		LastUpdated:     time.Now(),
+
+	// Create a pull request
+	pr, err := repoClient.Client.CreatePullRequest(task.Number, branchName, hi.config.AgentID)
+	if err != nil {
+		fmt.Printf("❌ Failed to create pull request for task #%d: %v\n", task.Number, err)
+		hi.hlog.Append(logging.TaskFailed, map[string]interface{}{"task_id": task.Number, "reason": "failed to create pull request"})
+		return
 	}
-	hi.discussionLock.Unlock()
-	
-	// Announce plan for peer review
-	metaMsg := map[string]interface{}{
-		"project_id":  task.ProjectID,
-		"issue_id":    task.Number,
-		"repository":  fmt.Sprintf("%s/%s", task.Repository.Owner, task.Repository.Repository),
-		"message":     "Here is my proposed plan for this cross-repository task. What are your thoughts?",
-		"plan":        plan,
-		"git_url":     task.GitURL,
-	}
-	
-	if err := hi.pubsub.PublishAntennaeMessage(pubsub.MetaDiscussion, metaMsg); err != nil {
-		fmt.Printf("⚠️ Failed to publish plan to meta-discussion channel: %v\n", err)
+
+	fmt.Printf("✅ Successfully created pull request for task #%d: %s\n", task.Number, pr.GetHTMLURL())
+	hi.hlog.Append(logging.TaskCompleted, map[string]interface{}{
+		"task_id":   task.Number,
+		"pr_url":    pr.GetHTMLURL(),
+		"pr_number": pr.GetNumber(),
+	})
+
+	// Report completion to Hive
+	if err := hi.hiveClient.UpdateTaskStatus(hi.ctx, task.ProjectID, task.Number, "completed", map[string]interface{}{
+		"pull_request_url": pr.GetHTMLURL(),
+	}); err != nil {
+		fmt.Printf("⚠️ Failed to report task completion to Hive: %v\n", err)
 	}
 }
 
-// handleMetaDiscussion handles incoming meta-discussion messages
+// requestAssistance publishes a help request to the task-specific topic.
+func (hi *HiveIntegration) requestAssistance(task *EnhancedTask, reason, topic string) {
+	fmt.Printf("🆘 Agent %s is requesting assistance for task #%d: %s\n", hi.config.AgentID, task.Number, reason)
+	hi.hlog.Append(logging.TaskHelpRequested, map[string]interface{}{
+		"task_id": task.Number,
+		"reason":  reason,
+	})
+
+	helpRequest := map[string]interface{}{
+		"issue_id":   task.Number,
+		"repository": fmt.Sprintf("%s/%s", task.Repository.Owner, task.Repository.Repository),
+		"reason":     reason,
+	}
+
+	hi.pubsub.PublishToDynamicTopic(topic, pubsub.TaskHelpRequest, helpRequest)
+}
+
+// handleMetaDiscussion handles all incoming messages from dynamic and static topics.
 func (hi *HiveIntegration) handleMetaDiscussion(msg pubsub.Message, from peer.ID) {
-	projectID, hasProject := msg.Data["project_id"].(float64)
-	issueID, hasIssue := msg.Data["issue_id"].(float64)
-	
-	if !hasProject || !hasIssue {
-		return
+	switch msg.Type {
+	case pubsub.TaskHelpRequest:
+		hi.handleHelpRequest(msg, from)
+	case pubsub.TaskHelpResponse:
+		hi.handleHelpResponse(msg, from)
+	default:
+		// Handle other meta-discussion messages (e.g., peer feedback)
 	}
-	
-	conversationKey := fmt.Sprintf("%d:%d", int(projectID), int(issueID))
-	
-	hi.discussionLock.Lock()
-	convo, exists := hi.activeDiscussions[conversationKey]
-	if !exists || convo.IsEscalated {
-		hi.discussionLock.Unlock()
-		return
+}
+
+// handleHelpRequest is called when another agent requests assistance.
+func (hi *HiveIntegration) handleHelpRequest(msg pubsub.Message, from peer.ID) {
+	issueID, _ := msg.Data["issue_id"].(float64)
+	reason, _ := msg.Data["reason"].(string)
+	fmt.Printf("🙋 Received help request for task #%d from %s: %s\n", int(issueID), from.ShortString(), reason)
+
+	// Simple logic: if we are not busy, we can help.
+	// A more advanced agent would check its capabilities against the reason.
+	canHelp := true // Placeholder for more complex logic
+
+	if canHelp {
+		fmt.Printf("✅ Agent %s can help with task #%d\n", hi.config.AgentID, int(issueID))
+		hi.hlog.Append(logging.TaskHelpOffered, map[string]interface{}{
+			"task_id":      int(issueID),
+			"requester_id": from.ShortString(),
+		})
+
+		response := map[string]interface{}{
+			"issue_id":     issueID,
+			"can_help":     true,
+			"capabilities": hi.config.Capabilities,
+		}
+		taskTopic := fmt.Sprintf("bzzz/meta/issue/%d", int(issueID))
+		hi.pubsub.PublishToDynamicTopic(taskTopic, pubsub.TaskHelpResponse, response)
 	}
-	
-	incomingMessage, _ := msg.Data["message"].(string)
-	repository, _ := msg.Data["repository"].(string)
-	
-	convo.History = append(convo.History, fmt.Sprintf("Response from %s (%s): %s", from.ShortString(), repository, incomingMessage))
-	convo.LastUpdated = time.Now()
-	hi.discussionLock.Unlock()
-	
-	fmt.Printf("🎯 Received peer feedback for task #%d in project %d. Generating response...\n", int(issueID), int(projectID))
-	
-	// Generate intelligent response
-	historyStr := strings.Join(convo.History, "\n")
-	prompt := fmt.Sprintf(
-		"You are an AI developer collaborating on a distributed task across multiple repositories. "+
-		"Repository: %s. Task: %s. Description: %s. "+
-		"Conversation history:\n%s\n\n"+
-		"Based on the last message, provide a concise and helpful response for cross-repository coordination.",
-		repository, convo.TaskTitle, convo.TaskDescription, historyStr,
-	)
-	
-	response, err := reasoning.GenerateResponse(hi.ctx, "phi3", prompt)
-	if err != nil {
-		fmt.Printf("❌ Failed to generate response for task #%d: %v\n", int(issueID), err)
-		return
-	}
-	
-	// Check for escalation
-	if hi.shouldEscalate(response, convo.History) {
-		fmt.Printf("🚨 Escalating task #%d in project %d for human review.\n", int(issueID), int(projectID))
-		convo.IsEscalated = true
-		go hi.triggerHumanEscalation(int(projectID), convo, response)
-		return
-	}
-	
-	fmt.Printf("💬 Sending response for task #%d in project %d...\n", int(issueID), int(projectID))
-	
-	responseMsg := map[string]interface{}{
-		"project_id": int(projectID),
-		"issue_id":   int(issueID),
-		"repository": repository,
-		"message":    response,
-	}
-	
-	if err := hi.pubsub.PublishAntennaeMessage(pubsub.MetaDiscussion, responseMsg); err != nil {
-		fmt.Printf("⚠️ Failed to publish response: %v\n", err)
+}
+
+// handleHelpResponse is called when an agent receives an offer for help.
+func (hi *HiveIntegration) handleHelpResponse(msg pubsub.Message, from peer.ID) {
+	issueID, _ := msg.Data["issue_id"].(float64)
+	canHelp, _ := msg.Data["can_help"].(bool)
+
+	if canHelp {
+		fmt.Printf("🤝 Received help offer for task #%d from %s\n", int(issueID), from.ShortString())
+		hi.hlog.Append(logging.TaskHelpReceived, map[string]interface{}{
+			"task_id":   int(issueID),
+			"helper_id": from.ShortString(),
+		})
+		// In a full implementation, the agent would now delegate a sub-task
+		// or use the helper's capabilities. For now, we just log it.
 	}
 }
 
@@ -420,6 +437,11 @@ func (hi *HiveIntegration) shouldEscalate(response string, history []string) boo
 
 // triggerHumanEscalation sends escalation to Hive and N8N
 func (hi *HiveIntegration) triggerHumanEscalation(projectID int, convo *Conversation, reason string) {
+	hi.hlog.Append(logging.Escalation, map[string]interface{}{
+		"task_id": convo.TaskID,
+		"reason":  reason,
+	})
+
 	// Report to Hive system
 	if err := hi.hiveClient.UpdateTaskStatus(hi.ctx, projectID, convo.TaskID, "escalated", map[string]interface{}{
 		"escalation_reason": reason,

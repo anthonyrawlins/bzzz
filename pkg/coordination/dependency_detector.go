@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 

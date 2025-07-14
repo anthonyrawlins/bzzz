@@ -19,6 +19,8 @@ TimeoutStopSec=30
 # Environment variables
 Environment=HOME=/home/tony
 Environment=USER=tony
+Environment=BZZZ_HIVE_API_URL=https://hive.home.deepblack.cloud
+Environment=BZZZ_GITHUB_TOKEN_FILE=/home/tony/AI/secrets/passwords_and_tokens/gh-token
 
 # Logging
 StandardOutput=journal

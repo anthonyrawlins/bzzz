@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/deepblackcloud/bzzz/pubsub"
-	"github.com/deepblackcloud/bzzz/reasoning"
+	"github.com/anthonyrawlins/bzzz/pubsub"
+	"github.com/anthonyrawlins/bzzz/reasoning"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
