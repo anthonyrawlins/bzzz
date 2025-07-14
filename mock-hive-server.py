@@ -369,7 +369,277 @@ def log_coordination_activity():
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧠 Coordination: {activity_type} - {details}")
     
+    # Save coordination activity to file
+    save_coordination_work(activity_type, details)
+    
     return jsonify({"success": True, "logged": True})
+
+@app.route('/api/bzzz/projects/<int:project_id>/submit-work', methods=['POST'])
+def submit_work(project_id):
+    """Endpoint for agents to submit their actual work/code/solutions"""
+    data = request.get_json()
+    task_number = data.get('task_number')
+    agent_id = data.get('agent_id')
+    work_type = data.get('work_type', 'code')  # code, documentation, configuration, etc.
+    content = data.get('content', '')
+    files = data.get('files', {})  # Dictionary of filename -> content
+    commit_message = data.get('commit_message', '')
+    description = data.get('description', '')
+    
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 📝 Work submission: {agent_id} -> Project {project_id} Task {task_number}")
+    print(f"   Type: {work_type}, Files: {len(files)}, Content length: {len(content)}")
+    
+    # Save the actual work content
+    work_data = {
+        "project_id": project_id,
+        "task_number": task_number,
+        "agent_id": agent_id,
+        "work_type": work_type,
+        "content": content,
+        "files": files,
+        "commit_message": commit_message,
+        "description": description,
+        "submitted_at": datetime.now().isoformat()
+    }
+    
+    save_agent_work(work_data)
+    
+    return jsonify({
+        "success": True, 
+        "work_id": f"{project_id}-{task_number}-{int(time.time())}",
+        "message": "Work submitted successfully to mock repository"
+    })
+
+@app.route('/api/bzzz/projects/<int:project_id>/create-pr', methods=['POST'])
+def create_pull_request(project_id):
+    """Endpoint for agents to submit pull request content"""
+    data = request.get_json()
+    task_number = data.get('task_number')
+    agent_id = data.get('agent_id')
+    pr_title = data.get('title', '')
+    pr_description = data.get('description', '')
+    files_changed = data.get('files_changed', {})
+    branch_name = data.get('branch_name', f"bzzz-task-{task_number}")
+    
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🔀 Pull Request: {agent_id} -> Project {project_id}")
+    print(f"   Title: {pr_title}")
+    print(f"   Files changed: {len(files_changed)}")
+    
+    # Save the pull request content
+    pr_data = {
+        "project_id": project_id,
+        "task_number": task_number,
+        "agent_id": agent_id,
+        "title": pr_title,
+        "description": pr_description,
+        "files_changed": files_changed,
+        "branch_name": branch_name,
+        "created_at": datetime.now().isoformat(),
+        "status": "open"
+    }
+    
+    save_pull_request(pr_data)
+    
+    return jsonify({
+        "success": True,
+        "pr_number": random.randint(100, 999),
+        "pr_url": f"https://github.com/mock/{get_repo_name(project_id)}/pull/{random.randint(100, 999)}",
+        "message": "Pull request created successfully in mock repository"
+    })
+
+@app.route('/api/bzzz/projects/<int:project_id>/coordination-discussion', methods=['POST'])
+def log_coordination_discussion(project_id):
+    """Endpoint for agents to log coordination discussions and decisions"""
+    data = request.get_json()
+    discussion_type = data.get('type', 'general')  # dependency_analysis, conflict_resolution, etc.
+    participants = data.get('participants', [])
+    messages = data.get('messages', [])
+    decisions = data.get('decisions', [])
+    context = data.get('context', {})
+    
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 💬 Coordination Discussion: Project {project_id}")
+    print(f"   Type: {discussion_type}, Participants: {len(participants)}, Messages: {len(messages)}")
+    
+    # Save coordination discussion
+    discussion_data = {
+        "project_id": project_id,
+        "type": discussion_type,
+        "participants": participants,
+        "messages": messages,
+        "decisions": decisions,
+        "context": context,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    save_coordination_discussion(discussion_data)
+    
+    return jsonify({"success": True, "logged": True})
+
+@app.route('/api/bzzz/projects/<int:project_id>/log-prompt', methods=['POST'])
+def log_agent_prompt(project_id):
+    """Endpoint for agents to log the prompts they are receiving/generating"""
+    data = request.get_json()
+    task_number = data.get('task_number')
+    agent_id = data.get('agent_id')
+    prompt_type = data.get('prompt_type', 'task_analysis')  # task_analysis, coordination, meta_thinking
+    prompt_content = data.get('prompt_content', '')
+    context = data.get('context', {})
+    model_used = data.get('model_used', 'unknown')
+    
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧠 Prompt Log: {agent_id} -> {prompt_type}")
+    print(f"   Model: {model_used}, Task: {project_id}#{task_number}")
+    print(f"   Prompt length: {len(prompt_content)} chars")
+    
+    # Save the prompt data
+    prompt_data = {
+        "project_id": project_id,
+        "task_number": task_number,
+        "agent_id": agent_id,
+        "prompt_type": prompt_type,
+        "prompt_content": prompt_content,
+        "context": context,
+        "model_used": model_used,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    save_agent_prompt(prompt_data)
+    
+    return jsonify({"success": True, "logged": True})
+
+def save_agent_prompt(prompt_data):
+    """Save agent prompts to files for analysis"""
+    import os
+    timestamp = datetime.now()
+    work_dir = "/tmp/bzzz_agent_prompts"
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Create filename with project, task, and timestamp
+    project_id = prompt_data["project_id"]
+    task_number = prompt_data["task_number"]
+    agent_id = prompt_data["agent_id"].replace("/", "_")  # Clean agent ID for filename
+    prompt_type = prompt_data["prompt_type"]
+    
+    filename = f"prompt_{prompt_type}_p{project_id}_t{task_number}_{agent_id}_{timestamp.strftime('%H%M%S')}.json"
+    prompt_file = os.path.join(work_dir, filename)
+    
+    with open(prompt_file, "w") as f:
+        json.dump(prompt_data, f, indent=2)
+    
+    print(f"   💾 Saved prompt to: {prompt_file}")
+    
+    # Also save to daily log
+    log_file = os.path.join(work_dir, f"agent_prompts_log_{timestamp.strftime('%Y%m%d')}.jsonl")
+    with open(log_file, "a") as f:
+        f.write(json.dumps(prompt_data) + "\n")
+
+def save_agent_work(work_data):
+    """Save actual agent work submissions to files"""
+    import os
+    timestamp = datetime.now()
+    work_dir = "/tmp/bzzz_agent_work"
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Create filename with project, task, and timestamp
+    project_id = work_data["project_id"]
+    task_number = work_data["task_number"]
+    agent_id = work_data["agent_id"].replace("/", "_")  # Clean agent ID for filename
+    
+    filename = f"work_p{project_id}_t{task_number}_{agent_id}_{timestamp.strftime('%H%M%S')}.json"
+    work_file = os.path.join(work_dir, filename)
+    
+    with open(work_file, "w") as f:
+        json.dump(work_data, f, indent=2)
+    
+    print(f"   💾 Saved work to: {work_file}")
+    
+    # Also save to daily log
+    log_file = os.path.join(work_dir, f"agent_work_log_{timestamp.strftime('%Y%m%d')}.jsonl")
+    with open(log_file, "a") as f:
+        f.write(json.dumps(work_data) + "\n")
+
+def save_pull_request(pr_data):
+    """Save pull request content to files"""
+    import os
+    timestamp = datetime.now()
+    work_dir = "/tmp/bzzz_pull_requests"
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Create filename with project, task, and timestamp
+    project_id = pr_data["project_id"]
+    task_number = pr_data["task_number"]
+    agent_id = pr_data["agent_id"].replace("/", "_")  # Clean agent ID for filename
+    
+    filename = f"pr_p{project_id}_t{task_number}_{agent_id}_{timestamp.strftime('%H%M%S')}.json"
+    pr_file = os.path.join(work_dir, filename)
+    
+    with open(pr_file, "w") as f:
+        json.dump(pr_data, f, indent=2)
+    
+    print(f"   💾 Saved PR to: {pr_file}")
+    
+    # Also save to daily log
+    log_file = os.path.join(work_dir, f"pull_requests_log_{timestamp.strftime('%Y%m%d')}.jsonl")
+    with open(log_file, "a") as f:
+        f.write(json.dumps(pr_data) + "\n")
+
+def save_coordination_discussion(discussion_data):
+    """Save coordination discussions to files"""
+    import os
+    timestamp = datetime.now()
+    work_dir = "/tmp/bzzz_coordination_discussions"
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Create filename with project and timestamp
+    project_id = discussion_data["project_id"]
+    discussion_type = discussion_data["type"]
+    
+    filename = f"discussion_{discussion_type}_p{project_id}_{timestamp.strftime('%H%M%S')}.json"
+    discussion_file = os.path.join(work_dir, filename)
+    
+    with open(discussion_file, "w") as f:
+        json.dump(discussion_data, f, indent=2)
+    
+    print(f"   💾 Saved discussion to: {discussion_file}")
+    
+    # Also save to daily log
+    log_file = os.path.join(work_dir, f"coordination_discussions_{timestamp.strftime('%Y%m%d')}.jsonl")
+    with open(log_file, "a") as f:
+        f.write(json.dumps(discussion_data) + "\n")
+
+def get_repo_name(project_id):
+    """Get repository name from project ID"""
+    repo_map = {
+        1: "hive",
+        2: "bzzz", 
+        3: "distributed-ai-dev",
+        4: "infra-automation"
+    }
+    return repo_map.get(project_id, "unknown-repo")
+
+def save_coordination_work(activity_type, details):
+    """Save coordination work to files for analysis"""
+    timestamp = datetime.now()
+    work_dir = "/tmp/bzzz_coordination_work"
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Create detailed log entry
+    work_entry = {
+        "timestamp": timestamp.isoformat(),
+        "type": activity_type,
+        "details": details,
+        "session_id": details.get("session_id", "unknown")
+    }
+    
+    # Save to daily log file
+    log_file = os.path.join(work_dir, f"coordination_work_{timestamp.strftime('%Y%m%d')}.jsonl")
+    with open(log_file, "a") as f:
+        f.write(json.dumps(work_entry) + "\n")
+    
+    # Save individual work items to separate files
+    if activity_type in ["code_generation", "task_solution", "pull_request_content"]:
+        work_file = os.path.join(work_dir, f"{activity_type}_{timestamp.strftime('%H%M%S')}.json")
+        with open(work_file, "w") as f:
+            json.dump(work_entry, f, indent=2)
 
 def start_background_task_updates():
     """Background thread to simulate changing task priorities and new tasks"""
@@ -416,6 +686,11 @@ if __name__ == '__main__':
     print("  GET  /api/bzzz/projects/<id>/tasks - Project tasks")
     print("  POST /api/bzzz/projects/<id>/claim - Claim task")
     print("  PUT  /api/bzzz/projects/<id>/status - Update task status")
+    print("  POST /api/bzzz/projects/<id>/submit-work - Submit actual work/code")
+    print("  POST /api/bzzz/projects/<id>/create-pr - Submit pull request content")
+    print("  POST /api/bzzz/projects/<id>/coordination-discussion - Log coordination discussions")
+    print("  POST /api/bzzz/projects/<id>/log-prompt - Log agent prompts and model usage")
+    print("  POST /api/bzzz/coordination-log - Log coordination activity")
     print("")
     print("Starting background task updates...")
     start_background_task_updates()
