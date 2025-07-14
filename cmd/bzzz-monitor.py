@@ -69,6 +69,17 @@ class BzzzMonitor:
         self.total_errors = 0
         self.api_status = "Unknown"
         
+        # Real coordination channel counters
+        self.channel_stats = {
+            'bzzz_coordination': {'messages': 0, 'rate': 0, 'last_count': 0},
+            'antennae_meta': {'messages': 0, 'rate': 0, 'last_count': 0},
+            'availability_broadcasts': {'messages': 0, 'rate': 0, 'last_count': 0},
+            'capability_broadcasts': {'messages': 0, 'rate': 0, 'last_count': 0},
+            'task_announcements': {'messages': 0, 'rate': 0, 'last_count': 0},
+            'coordination_sessions': {'messages': 0, 'rate': 0, 'last_count': 0}
+        }
+        self.last_rate_update = datetime.now()
+        
         # Terminal size
         self.update_terminal_size()
     
@@ -142,6 +153,7 @@ class BzzzMonitor:
             
             # Track availability broadcasts (agent activity)
             if 'availability_broadcast' in line:
+                self.channel_stats['availability_broadcasts']['messages'] += 1
                 try:
                     # Extract agent info from availability broadcast
                     if 'node_id:' in line and 'status:' in line:
@@ -170,6 +182,17 @@ class BzzzMonitor:
                 except:
                     pass
             
+            # Track capability broadcasts
+            if 'capability_broadcast' in line or 'Capabilities changed' in line:
+                self.channel_stats['capability_broadcasts']['messages'] += 1
+            
+            # Track coordination messages
+            if any(coord_keyword in line.lower() for coord_keyword in ['coordination', 'meta-discussion', 'antennae']):
+                if 'antennae' in line.lower() or 'meta-discussion' in line.lower():
+                    self.channel_stats['antennae_meta']['messages'] += 1
+                else:
+                    self.channel_stats['bzzz_coordination']['messages'] += 1
+            
             # Track task activity
             if any(keyword in line.lower() for keyword in ['task', 'repository', 'github']):
                 self.task_history.append({
@@ -177,6 +200,14 @@ class BzzzMonitor:
                     'activity': line.strip()
                 })
                 self.total_tasks += 1
+                
+                # Track specific task announcements
+                if any(announce_keyword in line.lower() for announce_keyword in ['task announcement', 'announcing task', 'new task']):
+                    self.channel_stats['task_announcements']['messages'] += 1
+            
+            # Track coordination sessions
+            if any(session_keyword in line.lower() for session_keyword in ['session start', 'coordination session', 'meta coordination']):
+                self.channel_stats['coordination_sessions']['messages'] += 1
             
             # Track errors
             if any(keyword in line.lower() for keyword in ['error', 'failed', 'cannot']):
@@ -260,14 +291,52 @@ class BzzzMonitor:
         
         print()
     
+    def update_message_rates(self):
+        """Calculate message rates for each channel"""
+        now = datetime.now()
+        time_diff = (now - self.last_rate_update).total_seconds()
+        
+        if time_diff >= 10:  # Update rates every 10 seconds
+            for channel, stats in self.channel_stats.items():
+                msg_diff = stats['messages'] - stats['last_count']
+                stats['rate'] = msg_diff / time_diff if time_diff > 0 else 0
+                stats['last_count'] = stats['messages']
+            
+            self.last_rate_update = now
+    
+    def draw_coordination_channels(self):
+        """Draw real coordination channel statistics"""
+        print(f"{Colors.BOLD}{Colors.BRIGHT_MAGENTA}Coordination Channels{Colors.RESET}")
+        print("━" * 50)
+        
+        self.update_message_rates()
+        
+        # Display channel stats in compact format
+        channels = [
+            ('Availability', 'availability_broadcasts', Colors.GREEN),
+            ('Capabilities', 'capability_broadcasts', Colors.BLUE),
+            ('Bzzz Coord', 'bzzz_coordination', Colors.YELLOW),
+            ('Antennae', 'antennae_meta', Colors.MAGENTA),
+            ('Task Ann.', 'task_announcements', Colors.CYAN),
+            ('Sessions', 'coordination_sessions', Colors.WHITE)
+        ]
+        
+        for name, key, color in channels:
+            stats = self.channel_stats[key]
+            rate_str = f"{stats['rate']:.1f}/s" if stats['rate'] > 0 else "0/s"
+            print(f"{name.ljust(11)}: {color}{str(stats['messages']).rjust(4)}{Colors.RESET} msgs {Colors.DIM}({rate_str}){Colors.RESET}")
+        
+        print()
+    
     def draw_coordination_status(self):
         """Draw coordination activity section"""
-        print(f"{Colors.BOLD}{Colors.BRIGHT_MAGENTA}Coordination Activity{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}System Status{Colors.RESET}")
         print("━" * 30)
         
         # Total coordination stats
-        print(f"Total Messages: {Colors.BRIGHT_CYAN}{self.total_messages}{Colors.RESET}")
-        print(f"Total Tasks: {Colors.BRIGHT_CYAN}{self.total_tasks}{Colors.RESET}")
+        total_coord_msgs = (self.channel_stats['bzzz_coordination']['messages'] + 
+                           self.channel_stats['antennae_meta']['messages'])
+        print(f"Coordination Messages: {Colors.BRIGHT_CYAN}{total_coord_msgs}{Colors.RESET}")
         print(f"Active Sessions: {Colors.BRIGHT_GREEN}{len(self.coordination_sessions)}{Colors.RESET}")
         
         # Recent task activity
@@ -279,9 +348,9 @@ class BzzzMonitor:
         print()
     
     def draw_recent_activity(self):
-        """Draw recent activity log"""
+        """Draw recent activity log with compact timestamps"""
         print(f"{Colors.BOLD}{Colors.BRIGHT_WHITE}Recent Activity{Colors.RESET}")
-        print("━" * 30)
+        print("━" * 50)
         
         # Combine and sort recent activities
         all_activities = []
@@ -291,25 +360,49 @@ class BzzzMonitor:
             all_activities.append({
                 'time': activity['timestamp'],
                 'type': 'AVAIL',
-                'message': f"Agent {activity['agent_id'][:8]}... status: {activity['status']}",
+                'message': f"Agent {activity['agent_id'][-6:]} status: {activity['status']}",
                 'color': Colors.GREEN
             })
         
         # Add task activities  
         for activity in list(self.task_history)[-3:]:
+            # Extract meaningful info from log line
+            msg = activity['activity']
+            if 'availability_broadcast' in msg:
+                continue  # Skip these, we show them in AVAIL
+            elif 'Connected Peers:' in msg:
+                peers = msg.split('Connected Peers: ')[1].split()[0] if 'Connected Peers: ' in msg else "?"
+                msg = f"P2P: {peers} peers connected"
+            elif 'repository' in msg.lower():
+                msg = "Repository sync activity"
+            elif 'Failed' in msg:
+                continue  # These go to errors
+            else:
+                msg = msg.split(': ', 1)[-1] if ': ' in msg else msg
+                msg = msg[:60] + "..." if len(msg) > 60 else msg
+            
             all_activities.append({
                 'time': activity['timestamp'],
                 'type': 'TASK',
-                'message': activity['activity'][:50] + "..." if len(activity['activity']) > 50 else activity['activity'],
+                'message': msg,
                 'color': Colors.YELLOW
             })
         
         # Add errors
         for error in list(self.error_history)[-3:]:
+            err_msg = error['error']
+            if 'Failed to get active repositories' in err_msg:
+                err_msg = "Hive API request failed"
+            elif 'Failed to create GitHub client' in err_msg:
+                err_msg = "GitHub verification failed (expected)"
+            else:
+                err_msg = err_msg.split(': ', 1)[-1] if ': ' in err_msg else err_msg
+                err_msg = err_msg[:60] + "..." if len(err_msg) > 60 else err_msg
+            
             all_activities.append({
                 'time': error['timestamp'],
                 'type': 'ERROR',
-                'message': error['error'][:50] + "..." if len(error['error']) > 50 else error['error'],
+                'message': err_msg,
                 'color': Colors.RED
             })
         
@@ -317,9 +410,18 @@ class BzzzMonitor:
         all_activities.sort(key=lambda x: x['time'], reverse=True)
         
         for activity in all_activities[:8]:  # Show last 8 activities
-            time_str = activity['time'].strftime("%H:%M:%S")
+            # Use relative time for more space
+            now = datetime.now()
+            diff = now - activity['time']
+            if diff.total_seconds() < 60:
+                time_str = f"{int(diff.total_seconds())}s"
+            elif diff.total_seconds() < 3600:
+                time_str = f"{int(diff.total_seconds()//60)}m"
+            else:
+                time_str = f"{int(diff.total_seconds()//3600)}h"
+            
             type_str = f"[{activity['type']}]".ljust(7)
-            print(f"{Colors.DIM}{time_str}{Colors.RESET} {activity['color']}{type_str}{Colors.RESET} {activity['message']}")
+            print(f"{Colors.DIM}{time_str.rjust(3)}{Colors.RESET} {activity['color']}{type_str}{Colors.RESET} {activity['message']}")
         
         print()
     
@@ -369,6 +471,7 @@ class BzzzMonitor:
                 # Draw dashboard
                 self.draw_header()
                 self.draw_p2p_status()
+                self.draw_coordination_channels()
                 self.draw_agent_activity()
                 self.draw_coordination_status()
                 self.draw_recent_activity()
