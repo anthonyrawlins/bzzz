@@ -1,18 +1,22 @@
 package sandbox
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
-	"time"
+	"path/filepath"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 const (
 	// DefaultDockerImage is the image used if a task does not specify one.
-	DefaultDockerImage = "bzzz-sandbox:latest"
+	DefaultDockerImage = "registry.home.deepblack.cloud/tony/bzzz-sandbox:latest"
 )
 
 // Sandbox represents a stateful, isolated execution environment for a single task.
@@ -62,8 +66,8 @@ func CreateSandbox(ctx context.Context, taskImage string) (*Sandbox, error) {
 	hostConfig := &container.HostConfig{
 		Binds: []string{fmt.Sprintf("%s:/home/agent/work", hostPath)},
 		Resources: container.Resources{
-			CPUs:   2,
-			Memory: 2 * 1024 * 1024 * 1024, // 2GB
+			NanoCPUs: 2 * 1000000000, // 2 CPUs
+			Memory:   2 * 1024 * 1024 * 1024, // 2GB
 		},
 	}
 
@@ -98,7 +102,7 @@ func (s *Sandbox) DestroySandbox() error {
 	}
 
 	// Define a timeout for stopping the container
-	timeout := 30 * time.Second
+	timeout := 30 // seconds
 	
 	// Stop the container
 	fmt.Printf("🛑 Stopping sandbox container %s...\n", s.ID[:12])
@@ -184,7 +188,40 @@ func (s *Sandbox) WriteFile(path string, content []byte) error {
 
 	// Copy the file into the container
 	dstPath := filepath.Join(s.Workspace, path)
-	return s.dockerCli.CopyToContainer(s.ctx, tmpfile.Name(), s.ID, dstPath)
+	
+	// Create tar archive of the file
+	tarBuf := new(bytes.Buffer)
+	tw := tar.NewWriter(tarBuf)
+	
+	fileInfo, err := os.Stat(tmpfile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to stat temp file: %w", err)
+	}
+	
+	header := &tar.Header{
+		Name: filepath.Base(path),
+		Size: fileInfo.Size(),
+		Mode: 0644,
+	}
+	
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("failed to write tar header: %w", err)
+	}
+	
+	fileContent, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to read temp file: %w", err)
+	}
+	
+	if _, err := tw.Write(fileContent); err != nil {
+		return fmt.Errorf("failed to write to tar: %w", err)
+	}
+	
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+	
+	return s.dockerCli.CopyToContainer(s.ctx, s.ID, filepath.Dir(dstPath), tarBuf, container.CopyToContainerOptions{})
 }
 
 // ReadFile reads the content of a file from the sandbox's workspace.

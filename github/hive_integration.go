@@ -12,7 +12,6 @@ import (
 	"github.com/anthonyrawlins/bzzz/pkg/hive"
 	"github.com/anthonyrawlins/bzzz/pkg/types"
 	"github.com/anthonyrawlins/bzzz/pubsub"
-	"github.com/anthonyrawlins/bzzz/reasoning"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -116,6 +115,7 @@ func (hi *HiveIntegration) syncRepositories() {
 				AccessToken: hi.githubToken,
 				Owner:       repo.Owner,
 				Repository:  repo.Repository,
+				BaseBranch:  repo.Branch,
 			}
 			
 			client, err := NewClient(hi.ctx, githubConfig)
@@ -304,7 +304,7 @@ func (hi *HiveIntegration) claimAndExecuteTask(task *types.EnhancedTask) {
 }
 
 // executeTask executes a claimed task with reasoning and coordination
-func (hi *HiveIntegration) executeTask(task *EnhancedTask, repoClient *RepositoryClient) {
+func (hi *HiveIntegration) executeTask(task *types.EnhancedTask, repoClient *RepositoryClient) {
 	// Define the dynamic topic for this task
 	taskTopic := fmt.Sprintf("bzzz/meta/issue/%d", task.Number)
 	hi.pubsub.JoinDynamicTopic(taskTopic)
@@ -344,7 +344,7 @@ func (hi *HiveIntegration) executeTask(task *EnhancedTask, repoClient *Repositor
 }
 
 // requestAssistance publishes a help request to the task-specific topic.
-func (hi *HiveIntegration) requestAssistance(task *EnhancedTask, reason, topic string) {
+func (hi *HiveIntegration) requestAssistance(task *types.EnhancedTask, reason, topic string) {
 	fmt.Printf("🆘 Agent %s is requesting assistance for task #%d: %s\n", hi.config.AgentID, task.Number, reason)
 	hi.hlog.Append(logging.TaskHelpRequested, map[string]interface{}{
 		"task_id": task.Number,

@@ -76,6 +76,11 @@ func NewClient(ctx context.Context, config *Config) (*Client, error) {
 		return nil, fmt.Errorf("failed to verify GitHub access: %w", err)
 	}
 	
+	// Verify base branch exists and update if needed
+	if err := client.verifyBaseBranch(); err != nil {
+		return nil, fmt.Errorf("failed to verify base branch: %w", err)
+	}
+	
 	return client, nil
 }
 
@@ -85,6 +90,25 @@ func (c *Client) verifyAccess() error {
 	if err != nil {
 		return fmt.Errorf("cannot access repository %s/%s: %w", 
 			c.config.Owner, c.config.Repository, err)
+	}
+	return nil
+}
+
+// verifyBaseBranch checks if the base branch exists and updates to default if not
+func (c *Client) verifyBaseBranch() error {
+	// Try to get the configured base branch
+	_, _, err := c.client.Git.GetRef(c.ctx, c.config.Owner, c.config.Repository, "heads/"+c.config.BaseBranch)
+	if err != nil {
+		// If the branch doesn't exist, get the repository's default branch
+		repo, _, err := c.client.Repositories.Get(c.ctx, c.config.Owner, c.config.Repository)
+		if err != nil {
+			return fmt.Errorf("failed to get repository info: %w", err)
+		}
+		
+		// Update config to use the default branch
+		if repo.DefaultBranch != nil {
+			c.config.BaseBranch = *repo.DefaultBranch
+		}
 	}
 	return nil
 }
