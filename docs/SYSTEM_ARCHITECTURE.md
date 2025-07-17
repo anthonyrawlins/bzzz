@@ -4,20 +4,18 @@ This document contains diagrams to visualize the architecture and data flows of 
 
 ---
 
-## 1. Component Architecture Diagram
-
-This diagram shows the main components of the Bzzz ecosystem and their relationships. It illustrates the static structure of the system, including internal modules, external dependencies, and P2P connections.
+### ✅ Fixed **Component Architecture Diagram**
 
 ```mermaid
 graph TD
-    subgraph "External Systems"
+    subgraph External_Systems ["External Systems"]
         GitHub[(GitHub Repositories)] -- "Tasks (Issues/PRs)" --> BzzzAgent
         HiveAPI[Hive REST API] -- "Repo Lists & Status Updates" --> BzzzAgent
         N8N([N8N Webhooks])
         Ollama[Ollama API]
     end
 
-    subgraph "Bzzz Agent Node"
+    subgraph Bzzz_Agent_Node ["Bzzz Agent Node"]
         BzzzAgent[Bzzz Agent]
         BzzzAgent -- "Manages" --> P2P
         BzzzAgent -- "Uses" --> Integration
@@ -35,9 +33,9 @@ graph TD
 
         Reasoning(Reasoning Module) -- "Sends Prompts To" --> Ollama
 
-        Sandbox(Docker Sandbox) -- "Isolated Environment"
+        Sandbox(Docker Sandbox) -->|Isolated| Executor
 
-        Logging(Hypercore Logging)
+        Logging(Hypercore Logging) -->|Creates Audit Trail| BzzzAgent
 
         Discovery(mDNS Discovery)
     end
@@ -51,52 +49,46 @@ graph TD
 
     classDef external fill:#E8DAEF,stroke:#8E44AD,stroke-width:2px;
     class GitHub,HiveAPI,N8N,Ollama external
-end
 ```
 
 ---
 
-## 2. Task Execution Flowchart
-
-This flowchart illustrates the dynamic lifecycle of a single task, from the moment it's available to its final completion and pull request creation.
+### ✅ Fixed **Task Execution Flowchart**
 
 ```mermaid
 flowchart TD
-    A[Start: Unassigned Task on GitHub] --> B{Bzzz Agent Polls Hive API};
-    B --> C{Discovers Active Repositories};
-    C --> D{Polls Repos for Suitable Tasks};
-    D --> E{Task Found?};
-    E -- No --> B;
-    E -- Yes --> F[Agent Claims Task via GitHub API];
-    F --> G[Report Claim to Hive API];
-    G --> H[Announce Claim on P2P PubSub];
+    A[Start: Unassigned Task on GitHub] --> B{Bzzz Agent Polls Hive API}
+    B --> C{Discovers Active Repositories}
+    C --> D{Polls Repos for Suitable Tasks}
+    D --> E{Task Found?}
+    E -- No --> B
+    E -- Yes --> F[Agent Claims Task via GitHub API]
+    F --> G[Report Claim to Hive API]
+    G --> H[Announce Claim on P2P PubSub]
 
-    subgraph "Task Execution Loop"
-        I[Create Docker Sandbox] --> J[Clone Repository];
-        J --> K{Generate Next Command via Reasoning/Ollama};
-        K --> L{Is Task Complete?};
-        L -- No --> M[Execute Command in Sandbox];
-        M --> N[Feed Output Back to Reasoning];
-        N --> K;
+    H --> I[Create Docker Sandbox]
+    I --> J[Clone Repository]
+    J --> K{Generate Next Command via Reasoning/Ollama}
+    K --> L{Is Task Complete?}
+    L -- No --> M[Execute Command in Sandbox]
+    M --> N[Feed Output Back to Reasoning]
+    N --> K
+    L -- Yes --> O[Create Branch & Commit Changes]
+    O --> P[Push Branch to GitHub]
+    P --> Q[Create Pull Request]
+    Q --> R[Report Completion to Hive API]
+    R --> S[Announce Completion on PubSub]
+    S --> T[Destroy Docker Sandbox]
+    T --> Z[End]
+
+    K -- "Needs Help" --> MD1
+
+    %% Meta-Discussion Loop (Separate Cluster)
+    subgraph Meta_Discussion ["Meta-Discussion (Antennae)"]
+        MD1{Agent Proposes Plan} -->|PubSub| MD2[Other Agents Review]
+        MD2 -->|Feedback| MD1
+        MD1 -->|Stuck?| MD3{Escalate to N8N}
     end
 
-    H --> I;
-    L -- Yes --> O[Create Branch & Commit Changes];
-    O --> P[Push Branch to GitHub];
-    P --> Q[Create Pull Request];
-    Q --> R[Report Completion to Hive API];
-    R --> S[Announce Completion on PubSub];
-    S --> T[Destroy Docker Sandbox];
-    T --> Z[End];
-
-    subgraph "Meta-Discussion (Antennae)"
-        direction LR
-        MD1{Agent Proposes Plan} -- PubSub --> MD2[Other Agents Review];
-        MD2 -- Feedback --> MD1;
-        MD1 -- "Stuck?" --> MD3{Escalate to N8N};
-    end
-
-    H -.-> MD1;
-    K -- "Needs Help" --> MD1;
-end
+    H -.-> MD1
 ```
