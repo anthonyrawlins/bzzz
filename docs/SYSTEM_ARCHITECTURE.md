@@ -97,5 +97,6 @@ flowchart TD
     end
 
     H -.-> MD1;
-    K -. "Needs Help" .-> MD1
+    K -. "Needs Help" .-> MD1;
+end
 ```
