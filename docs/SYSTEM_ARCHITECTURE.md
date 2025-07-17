@@ -13,8 +13,8 @@ graph TD
     subgraph "External Systems"
         GitHub[(GitHub Repositories)] -- "Tasks (Issues/PRs)" --> BzzzAgent
         HiveAPI[Hive REST API] -- "Repo Lists & Status Updates" --> BzzzAgent
-        N8N([N8N Webhooks]) -- "Receives Escalations"
-        Ollama[Ollama API] -- "LLM Inference"
+        N8N([N8N Webhooks])
+        Ollama[Ollama API]
     end
 
     subgraph "Bzzz Agent Node"
