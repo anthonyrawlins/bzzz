@@ -21,9 +21,9 @@ type ExecuteTaskResult struct {
 
 // ExecuteTask manages the entire lifecycle of a task using a sandboxed environment.
 // Returns sandbox reference so it can be destroyed after PR creation
-func ExecuteTask(ctx context.Context, task *types.EnhancedTask, hlog *logging.HypercoreLog) (*ExecuteTaskResult, error) {
+func ExecuteTask(ctx context.Context, task *types.EnhancedTask, hlog *logging.HypercoreLog, agentConfig *config.AgentConfig) (*ExecuteTaskResult, error) {
 	// 1. Create the sandbox environment
-	sb, err := sandbox.CreateSandbox(ctx, "") // Use default image for now
+	sb, err := sandbox.CreateSandbox(ctx, "", agentConfig) // Use default image for now
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sandbox: %w", err)
 	}

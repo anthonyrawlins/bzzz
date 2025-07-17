@@ -182,7 +182,7 @@ func (c *Client) ClaimTask(issueNumber int, agentID string) (*Task, error) {
 	
 	// Attempt atomic assignment using GitHub's native assignment
 	// GitHub only accepts existing usernames, so we'll assign to the repo owner
-	githubAssignee := "anthonyrawlins"
+	githubAssignee := c.config.Assignee
 	issueRequest := &github.IssueRequest{
 		Assignee: &githubAssignee,
 	}

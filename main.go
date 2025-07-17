@@ -141,7 +141,7 @@ func main() {
 	}
 	
 	// Initialize dynamic GitHub integration
-	var ghIntegration *github.HiveIntegration
+	var ghIntegration *github.Integration
 	if githubToken != "" {
 		// Use agent ID from config (auto-generated from node ID)
 		agentID := cfg.Agent.ID
@@ -156,7 +156,7 @@ func main() {
 			MaxTasks:     cfg.Agent.MaxTasks,
 		}
 		
-		ghIntegration = github.NewHiveIntegration(ctx, hiveClient, githubToken, ps, hlog, integrationConfig)
+		ghIntegration = github.NewIntegration(ctx, hiveClient, githubToken, ps, hlog, integrationConfig, &cfg.Agent)
 		
 		// Start the integration service
 		ghIntegration.Start()
@@ -339,7 +339,7 @@ func announceCapabilitiesOnChange(ps *pubsub.PubSub, nodeID string, cfg *config.
 		cfg.Agent.Models = validModels
 		
 		// Configure reasoning module with available models and webhook
-		reasoning.SetModelConfig(validModels, cfg.Agent.ModelSelectionWebhook)
+		reasoning.SetModelConfig(validModels, cfg.Agent.ModelSelectionWebhook, cfg.Agent.DefaultReasoningModel)
 	}
 
 	// Get current capabilities

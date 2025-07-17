@@ -36,6 +36,8 @@ type AgentConfig struct {
 	Models                []string      `yaml:"models"`
 	Specialization        string        `yaml:"specialization"`
 	ModelSelectionWebhook string        `yaml:"model_selection_webhook"`
+	DefaultReasoningModel string        `yaml:"default_reasoning_model"`
+	SandboxImage          string        `yaml:"sandbox_image"`
 }
 
 // GitHubConfig holds GitHub integration settings
@@ -44,6 +46,7 @@ type GitHubConfig struct {
 	UserAgent    string        `yaml:"user_agent"`
 	Timeout      time.Duration `yaml:"timeout"`
 	RateLimit    bool          `yaml:"rate_limit"`
+	Assignee     string        `yaml:"assignee"`
 }
 
 // P2PConfig holds P2P networking configuration
@@ -107,12 +110,15 @@ func getDefaultConfig() *Config {
 			Models:                []string{"phi3", "llama3.1"},
 			Specialization:        "general_developer",
 			ModelSelectionWebhook: "https://n8n.home.deepblack.cloud/webhook/model-selection",
+			DefaultReasoningModel: "phi3",
+			SandboxImage:          "registry.home.deepblack.cloud/tony/bzzz-sandbox:latest",
 		},
 		GitHub: GitHubConfig{
 			TokenFile: "/home/tony/AI/secrets/passwords_and_tokens/gh-token",
 			UserAgent: "Bzzz-P2P-Agent/1.0",
 			Timeout:   30 * time.Second,
 			RateLimit: true,
+			Assignee:  "anthonyrawlins",
 		},
 		P2P: P2PConfig{
 			ServiceTag:              "bzzz-peer-discovery",

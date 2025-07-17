@@ -18,6 +18,7 @@ const (
 var (
 	availableModels []string
 	modelWebhookURL string
+	defaultModel    string
 )
 
 // OllamaRequest represents the request payload for the Ollama API.
@@ -84,9 +85,10 @@ func GenerateResponse(ctx context.Context, model, prompt string) (string, error)
 }
 
 // SetModelConfig configures the available models and webhook URL for smart model selection
-func SetModelConfig(models []string, webhookURL string) {
+func SetModelConfig(models []string, webhookURL, defaultReasoningModel string) {
 	availableModels = models
 	modelWebhookURL = webhookURL
+	defaultModel = defaultReasoningModel
 }
 
 // selectBestModel calls the model selection webhook to choose the best model for a prompt
@@ -96,7 +98,7 @@ func selectBestModel(availableModels []string, prompt string) string {
 		if len(availableModels) > 0 {
 			return availableModels[0]
 		}
-		return "phi3" // Last resort fallback
+		return defaultModel // Last resort fallback
 	}
 	
 	requestPayload := map[string]interface{}{

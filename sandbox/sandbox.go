@@ -15,11 +15,6 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-const (
-	// DefaultDockerImage is the image used if a task does not specify one.
-	DefaultDockerImage = "registry.home.deepblack.cloud/tony/bzzz-sandbox:latest"
-)
-
 // Sandbox represents a stateful, isolated execution environment for a single task.
 type Sandbox struct {
 	ID          string // The ID of the running container.
@@ -37,9 +32,9 @@ type CommandResult struct {
 }
 
 // CreateSandbox provisions a new Docker container for a task.
-func CreateSandbox(ctx context.Context, taskImage string) (*Sandbox, error) {
+func CreateSandbox(ctx context.Context, taskImage string, agentConfig *config.AgentConfig) (*Sandbox, error) {
 	if taskImage == "" {
-		taskImage = DefaultDockerImage
+		taskImage = agentConfig.SandboxImage
 	}
 
 	// Create a new Docker client
