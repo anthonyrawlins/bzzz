@@ -37,7 +37,7 @@ graph TD
 
         Sandbox(Docker Sandbox) -- "Isolated Environment"
 
-        Logging(Hypercore Logging) -- "Creates Audit Trail"
+        Logging(Hypercore Logging)
 
         Discovery(mDNS Discovery)
     end
